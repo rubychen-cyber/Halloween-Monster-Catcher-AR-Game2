@@ -1,0 +1,135 @@
+async function initCamera() {
+    const video = document.getElementById('arVideo');
+    const simBg = document.getElementById('simulatedBg');
+    const statusDot = document.getElementById('camStatusDot');
+    const statusText = document.getElementById('camStatusText');
+
+    // 檢查瀏覽器是否支援相機
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('此瀏覽器不支援 getUserMedia');
+
+        video.style.display = 'none';
+        simBg.classList.remove('opacity-0');
+
+        statusDot.className =
+            "w-2.5 h-2.5 rounded-full bg-yellow-400";
+
+        statusText.innerText =
+            "瀏覽器不支援即時相機，請使用拍照掃碼";
+
+        return;
+    }
+
+    try {
+        statusText.innerText = "正在啟動手機相機...";
+        statusDot.className =
+            "w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse";
+
+        // 先取得後鏡頭
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+                facingMode: {
+                    ideal: "environment"
+                },
+                width: {
+                    ideal: 1280
+                },
+                height: {
+                    ideal: 720
+                }
+            }
+        });
+
+        console.log("Camera stream:", cameraStream);
+
+        // 設定 video
+        video.srcObject = cameraStream;
+
+        // 強制顯示
+        video.style.display = 'block';
+        video.classList.remove('hidden');
+
+        // 確保 video 可播放
+        await new Promise((resolve) => {
+            if (video.readyState >= 2) {
+                resolve();
+                return;
+            }
+
+            video.addEventListener('loadedmetadata', resolve, {
+                once: true
+            });
+        });
+
+        // iPhone / Safari 非常重要
+        try {
+            await video.play();
+        } catch (playError) {
+            console.warn("video.play() 被瀏覽器阻擋:", playError);
+
+            // 某些 WebView 需要使用者觸控後才能 play
+            statusText.innerText =
+                "請點一下畫面啟動相機";
+        }
+
+        console.log(
+            "Video:",
+            video.videoWidth,
+            "x",
+            video.videoHeight,
+            "readyState:",
+            video.readyState
+        );
+
+        // 隱藏模擬背景
+        simBg.style.opacity = '0';
+        simBg.style.pointerEvents = 'none';
+
+        // Camera OK
+        statusDot.className =
+            "w-2.5 h-2.5 rounded-full bg-spooky-green animate-pulse";
+
+        statusText.innerText =
+            "QR碼掃描器已啟動";
+
+        isScanningActive = true;
+
+        // 開始 QR 掃描
+        requestAnimationFrame(scanQrLoop);
+
+    } catch (err) {
+
+        console.error("Camera Error:", err);
+
+        // 相機失敗 → 回到拍照模式
+        video.pause();
+        video.srcObject = null;
+
+        video.style.display = 'none';
+        video.classList.add('hidden');
+
+        simBg.style.opacity = '1';
+        simBg.style.pointerEvents = 'auto';
+
+        statusDot.className =
+            "w-2.5 h-2.5 rounded-full bg-yellow-400";
+
+        if (err.name === 'NotAllowedError') {
+            statusText.innerText =
+                "相機權限被拒絕，請開啟相機權限";
+
+        } else if (err.name === 'NotFoundError') {
+            statusText.innerText =
+                "找不到手機相機，請使用拍照掃碼";
+
+        } else if (err.name === 'NotReadableError') {
+            statusText.innerText =
+                "相機目前被其他 App 使用";
+
+        } else {
+            statusText.innerText =
+                "請點擊拍照或使用模擬測試";
+        }
+    }
+}
